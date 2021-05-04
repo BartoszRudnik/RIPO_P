@@ -17,6 +17,14 @@ def region_of_interest(image):
     masked_image = cv2.bitwise_and(image, mask)
     return masked_image
 
+def fill_lane(image, frame):
+    points = np.array([[(image[0][2], image[0][3]), (image[0][0], image[0][1]), (image[1][0], image[1][1]), (image[1][2], image[1][3])]])
+
+    filled_image = np.copy(frame)
+    cv2.fillPoly(filled_image, points, color=[0, 255, 0])
+
+    return filled_image
+
 def display_lines(image, lines):
     check_lines = np.zeros_like(image)
     if lines is not None:        
@@ -84,9 +92,12 @@ while(cap.isOpened()):
 
     hough_image = cv2.HoughLinesP(cropped_image, 2, np.pi/180, 100, np.array([]), minLineLength=40, maxLineGap=5)    
     average_lines_image = average_slope_intercept(frame, hough_image)
+
+    filled_lanes = fill_lane(average_lines_image, frame)
     lines_image = display_lines(frame, average_lines_image)
 
     combo_image = cv2.addWeighted(frame, 0.8, lines_image, 1, 1)
+    combo_image = cv2.addWeighted(combo_image, 0.8, filled_lanes, 1, 1)
 
     cv2.imshow("result", combo_image)
     cv2.waitKey(1)
