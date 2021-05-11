@@ -2,18 +2,16 @@ from PyQt5 import QtGui
 from PyQt5.QtWidgets import QWidget, QApplication, QLabel, QVBoxLayout, QMainWindow, QPushButton, QFileDialog, QComboBox
 from PyQt5.QtGui import QPixmap, QImage
 import cv2
-from PyQt5.QtCore import pyqtSignal, pyqtSlot, Qt, QThread
+from PyQt5.QtCore import pyqtSignal, pyqtSlot, Qt, QThread, QMutex
 import numpy as np
-import pygame
 import datetime as dt
-import image_segmentation
+from image_segmentation import ImageSegmentation 
+import pygame
+import time
 
 class StartWindow(QMainWindow):
     def __init__(self):
-        super().__init__()
-
-        self.lastTime = dt.datetime.now()
-        self.currentTime = dt.datetime.now()
+        super().__init__()       
 
         self.video_name = None
         self.image_name = None
@@ -86,7 +84,7 @@ class StartWindow(QMainWindow):
 
     def start_image(self):
         self.image = cv2.imread(self.image_name)
-        self.image = image_segmentation.analize_photo(self.image)
+        self.image = ImageSegmentation.analize_photo(ImageSegmentation, self.image)
         self.image = QtGui.QImage(self.image.data, self.image.shape[1], self.image.shape[0], QtGui.QImage.Format_RGB888).rgbSwapped()
         self.image = self.image.scaled(1280, 720, Qt.KeepAspectRatio)       
         self.image_view.setPixmap(QtGui.QPixmap.fromImage(self.image))
@@ -103,16 +101,7 @@ class StartWindow(QMainWindow):
         self.thread.start()
 
     def stop(self):
-        self.thread.stop()
-
-    def playSound(self):
-        pygame.mixer.init()        
-        pygame.mixer.music.load("sound.mp3")
-
-        if voice.get_busy() == False:
-            if(self.currentTime - self.lastTime).seconds > 4:
-                self.lastTime = dt.datetime.now()
-                pygame.mixer.music.play()
+        self.thread.stop()   
 
 
     @pyqtSlot(np.ndarray)
@@ -155,7 +144,7 @@ class LiveThread(QThread):
         while self._run_flag:
             ret, cv_img = cap.read()
             if ret:
-                cv_img = image_segmentation.analize_video(cv_img)
+                cv_img = ImageSegmentation.analize_video(ImageSegmentation, cv_img)
                 cv_img = cv2.rotate(cv_img, cv2.ROTATE_90_COUNTERCLOCKWISE)
                 self.change_pixmap_signal.emit(cv_img)
         cap.release()
@@ -169,18 +158,43 @@ class VideoThread(QThread):
     change_pixmap_signal = pyqtSignal(np.ndarray)
 
     def __init__(self, video_name):
-        super().__init__()
+        super().__init__()        
+        self.video_name = video_name        
+
         self._run_flag = True
-        self.video_name = video_name
+        self.image_segmentation = ImageSegmentation()
+        self.last_time = dt.datetime.now()
+        
+        self.mutex = QMutex()
+
+    def play_warning(self):
+        self.mutex.lock()
+
+        current_time = dt.datetime.now()
+
+        if  (current_time - self.last_time).seconds > 2:                        
+            pygame.mixer.init()        
+            pygame.mixer.music.load("sound.ogg")
+            pygame.mixer.music.play()           
+
+            self.last_time = dt.datetime.now()
+
+        self.mutex.unlock()        
+
 
     def run(self):
         cap = cv2.VideoCapture(self.video_name)
         while self._run_flag:
             ret, cv_img = cap.read()
             if ret:
-                cv_img = image_segmentation.analize_video(cv_img)
+                check, cv_img = self.image_segmentation.analize_video(cv_img)
                 cv_img = cv2.rotate(cv_img, cv2.ROTATE_90_COUNTERCLOCKWISE)
+
                 self.change_pixmap_signal.emit(cv_img)
+
+                if not check:                    
+                    self.play_warning()
+
         cap.release()
 
     def stop(self):
