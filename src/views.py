@@ -6,6 +6,7 @@ from PyQt5.QtCore import pyqtSignal, pyqtSlot, Qt, QThread
 import numpy as np
 import pygame
 import datetime as dt
+import image_segmentation
 
 class StartWindow(QMainWindow):
     def __init__(self):
@@ -85,8 +86,9 @@ class StartWindow(QMainWindow):
 
     def start_image(self):
         self.image = cv2.imread(self.image_name)
+        self.image = image_segmentation.analize_photo(self.image)
         self.image = QtGui.QImage(self.image.data, self.image.shape[1], self.image.shape[0], QtGui.QImage.Format_RGB888).rgbSwapped()
-        self.image = self.image.scaled(640, 350, Qt.KeepAspectRatio)
+        self.image = self.image.scaled(1280, 720, Qt.KeepAspectRatio)       
         self.image_view.setPixmap(QtGui.QPixmap.fromImage(self.image))
 
 
@@ -153,6 +155,8 @@ class LiveThread(QThread):
         while self._run_flag:
             ret, cv_img = cap.read()
             if ret:
+                cv_img = image_segmentation.analize_video(cv_img)
+                cv_img = cv2.rotate(cv_img, cv2.ROTATE_90_COUNTERCLOCKWISE)
                 self.change_pixmap_signal.emit(cv_img)
         cap.release()
 
@@ -174,6 +178,8 @@ class VideoThread(QThread):
         while self._run_flag:
             ret, cv_img = cap.read()
             if ret:
+                cv_img = image_segmentation.analize_video(cv_img)
+                cv_img = cv2.rotate(cv_img, cv2.ROTATE_90_COUNTERCLOCKWISE)
                 self.change_pixmap_signal.emit(cv_img)
         cap.release()
 
