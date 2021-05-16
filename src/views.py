@@ -136,17 +136,40 @@ class LiveThread(QThread):
 
     def __init__(self, camera_id):
         super().__init__()
+
         self._run_flag = True
         self.camera_id = camera_id
+        self.image_segmentation = ImageSegmentation()
+        self.last_time = dt.datetime.now()
+
+        self.mutex = QMutex()
+
+    def play_warning(self):
+        self.mutex.lock()
+
+        current_time = dt.datetime.now()
+
+        if  (current_time - self.last_time).seconds > 2:                        
+            pygame.mixer.init()        
+            pygame.mixer.music.load("sound.ogg")
+            pygame.mixer.music.play()           
+
+            self.last_time = dt.datetime.now()
+
+        self.mutex.unlock()      
 
     def run(self):
         cap = cv2.VideoCapture(self.camera_id)
         while self._run_flag:
             ret, cv_img = cap.read()
             if ret:
-                cv_img = ImageSegmentation.analize_video(ImageSegmentation, cv_img)
+                check, cv_img = self.image_segmentation.analize_video(cv_img)
                 cv_img = cv2.rotate(cv_img, cv2.ROTATE_90_COUNTERCLOCKWISE)
                 self.change_pixmap_signal.emit(cv_img)
+
+                if not check:
+                    self.play_warning()
+
         cap.release()
 
     def stop(self):
