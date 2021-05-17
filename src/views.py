@@ -188,6 +188,8 @@ class VideoThread(QThread):
         self.image_segmentation = ImageSegmentation()
         self.last_time = dt.datetime.now()
         
+        self.not_check_counter = 0
+        
         self.mutex = QMutex()
 
     def play_warning(self):
@@ -215,8 +217,13 @@ class VideoThread(QThread):
 
                 self.change_pixmap_signal.emit(cv_img)
 
-                if not check:                    
-                    self.play_warning()
+                if not check:
+                    self.not_check_counter += 1
+
+                    if self.not_check_counter >= 15:                    
+                        self.play_warning()
+                else:
+                    self.not_check_counter = 0
 
         cap.release()
 

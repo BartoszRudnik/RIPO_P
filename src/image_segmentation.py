@@ -12,7 +12,7 @@ class ImageSegmentation():
 
     def car_position(self, frame, left_fit, right_fit):
 
-        XM_PER_PIX = 3.5 / 720
+        XM_PER_PIX = 3.5 / 480
 
         car_location = frame.shape[1] / 2
         height = frame.shape[0]
@@ -60,8 +60,8 @@ class ImageSegmentation():
 
     def lane_curvature(self, left_y, left_x, right_y, right_x):
         y_eval = 1180
-        YM_PER_PIX = 6 / 1280
-        XM_PER_PIX = 3.5 / 720
+        YM_PER_PIX = 3.5 / 450
+        XM_PER_PIX = 3.5 / 480
 
         left_fit_cr = np.polyfit(left_y * YM_PER_PIX, left_x * (
             XM_PER_PIX), 2)
@@ -76,6 +76,37 @@ class ImageSegmentation():
             1])**2)**1.5) / np.absolute(2*right_fit_cr[0])
 
         return left_curvem, right_curvem
+
+    def get_histogram(self, frame):
+
+        histogram = np.sum(frame[int(frame.shape[0]/2):, :], axis=0)
+
+        return histogram
+
+
+    def get_histogram_peaks(self, histogram):
+
+        histogram_mid = np.int(histogram.shape[0] / 2)
+
+        left_peak = np.argmax(histogram[:histogram_mid])
+        right_peak = np.argmax(histogram[histogram_mid:]) + histogram_mid
+
+        return left_peak, right_peak
+
+
+    def get_bird_view(self, frame, original_image_size):
+
+        region_of_interest = np.array([[(250, 830), (0, 1280), (1080, 1280),  (730, 830)]])
+        desired_points = np.array([[(250, 0), (250, 1280), (980, 1280), (980, 0)]])
+
+        transformation_matrix = cv2.getPerspectiveTransform(region_of_interest, desired_points)
+        inverse_transformation_matrix = cv2.getPerspectiveTransform(desired_points, region_of_interest)
+
+        warped_frame = cv2.warpPerspective(frame, transformation_matrix, original_image_size, flags=(cv2.INTER_LINEAR))
+        
+        _, warped_frame_to_binary = cv2.threshold(warped_frame, 127, 255, cv2.THRESH_BINARY)
+
+        return warped_frame_to_binary
 
     def canny(self, image):
         lane_image = np.copy(image)
@@ -201,8 +232,9 @@ class ImageSegmentation():
         canny_image = self.canny(frame)
         cropped_image = self.region_of_interest(canny_image)
 
-        hough_image = cv2.HoughLinesP(
-            cropped_image, 2, np.pi/180, 100, np.array([]), minLineLength=40, maxLineGap=5)
+        bird_view_image = self.get_bird_view(cropped_image, frame.shape[::-1][1:])
+
+        hough_image = cv2.HoughLinesP(bird_view_image, 2, np.pi/180, 100, np.array([]), minLineLength=40, maxLineGap=5)
         average_lines_image = self.average_slope_intercept(frame, hough_image)
 
         filled_lanes = self.fill_lane(average_lines_image, frame)
