@@ -96,17 +96,27 @@ class ImageSegmentation():
 
     def get_bird_view(self, frame, original_image_size):
 
-        region_of_interest = np.array([[(250, 830), (0, 1280), (1080, 1280),  (730, 830)]])
-        desired_points = np.array([[(250, 0), (250, 1280), (980, 1280), (980, 0)]])
+        region_of_interest = np.float32([(200, 830), (0, 1280), (1080, 1280),  (770, 830)])
+        desired_points = np.float32([(200, 0), (200, 1280), (1080, 1280), (1080, 0)])
 
-        transformation_matrix = cv2.getPerspectiveTransform(region_of_interest, desired_points)
-        inverse_transformation_matrix = cv2.getPerspectiveTransform(desired_points, region_of_interest)
+        transformation_matrix = cv2.getPerspectiveTransform(region_of_interest, desired_points)        
 
         warped_frame = cv2.warpPerspective(frame, transformation_matrix, original_image_size, flags=(cv2.INTER_LINEAR))
         
         _, warped_frame_to_binary = cv2.threshold(warped_frame, 127, 255, cv2.THRESH_BINARY)
 
         return warped_frame_to_binary
+
+    def return_from_bird_view(self, frame, original_frame):
+
+        region_of_interest = np.float32([(200, 830), (0, 1280), (1080, 1280),  (770, 830)])
+        desired_points = np.float32([(200, 0), (200, 1280), (1080, 1280), (1080, 0)])
+
+        inverse_transformation_matrix = cv2.getPerspectiveTransform(desired_points, region_of_interest)
+
+        new_warp = cv2.warpPerspective(frame, inverse_transformation_matrix, (original_frame.shape[1], original_frame.shape[0]))
+
+        return new_warp
 
     def canny(self, image):
         lane_image = np.copy(image)
@@ -117,7 +127,7 @@ class ImageSegmentation():
 
     def region_of_interest(self, image):
         trapezoid = np.array(
-            [[(250, 830), (0, 1280), (1080, 1280),  (730, 830)]])
+            [[(450, 0), (0, 1280), (1080, 1280), (930, 0)]])
         mask = np.zeros_like(image)
         cv2.fillPoly(mask, trapezoid, 255)
         masked_image = cv2.bitwise_and(image, mask)
@@ -200,30 +210,33 @@ class ImageSegmentation():
         else:
             return 0, 0, car_position, False, np.array([left_line, right_line])
 
+
     def analize_video(self, frame):
 
-        frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+        frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)        
 
         canny_image = self.canny(frame)
-        cropped_image = self.region_of_interest(canny_image)
+        bird_view_image = self.get_bird_view(canny_image, frame.shape[::-1][1:])
+        cropped_image = self.region_of_interest(bird_view_image)        
 
-        hough_image = cv2.HoughLinesP(
-            cropped_image, 2, np.pi/180, 100, np.array([]), minLineLength=40, maxLineGap=5)
+        from_bird_view = self.return_from_bird_view(cropped_image, frame)
+
+        hough_image = cv2.HoughLinesP(from_bird_view, 2, np.pi/180, 100, np.array([]), minLineLength=40, maxLineGap=5)
+
         left_curvature, right_curvature, car_position, valid_detection, average_lines_image = self.average_slope_intercept(
             frame, hough_image)
 
         if not valid_detection:
             frame = self.put_car_position_on_image(frame, car_position)
             return False, frame
-
+        
         filled_lanes = self.fill_lane(average_lines_image, frame)
         lines_image = self.display_lines(frame, average_lines_image)
-
+        
         combo_image = cv2.addWeighted(frame, 0.8, lines_image, 1, 1)
         combo_image = cv2.addWeighted(combo_image, 0.8, filled_lanes, 1, 1)
         combo_image = self.put_car_position_on_image(combo_image, car_position)
-        combo_image = self.put_lane_curvature_on_image(
-            combo_image, left_curvature, right_curvature)
+        combo_image = self.put_lane_curvature_on_image(combo_image, left_curvature, right_curvature)       
 
         return True, combo_image
 
