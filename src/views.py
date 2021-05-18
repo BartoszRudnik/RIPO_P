@@ -17,6 +17,8 @@ class StartWindow(QMainWindow):
         self.image_name = None
         self.camera_id = 0
 
+        self.image_segmentation = ImageSegmentation()
+
         self.central_widget = QWidget()
         self.button_frame = QPushButton('Start zdjecie', self.central_widget)
         self.button_movie = QPushButton('Start nagranie', self.central_widget)
@@ -62,8 +64,9 @@ class StartWindow(QMainWindow):
         self.camera_combo.currentIndexChanged.connect(self.selection_change)
         
 
-    def selection_change(self, i):
-        self.camera_id = i       
+    def selection_change(self):
+        print(self.camera_combo.currentText())
+        self.camera_id = int(self.camera_combo.currentText())      
 
     def openFileDialogImage(self):
         self.openFileNameDialog(0)
@@ -84,9 +87,9 @@ class StartWindow(QMainWindow):
 
     def start_image(self):
         self.image = cv2.imread(self.image_name)
-        self.image = ImageSegmentation.analize_photo(ImageSegmentation, self.image)
+        _, self.image = self.image_segmentation.analize_photo(self.image, 0)
         self.image = QtGui.QImage(self.image.data, self.image.shape[1], self.image.shape[0], QtGui.QImage.Format_RGB888).rgbSwapped()
-        self.image = self.image.scaled(1280, 720, Qt.KeepAspectRatio)       
+        self.image = self.image.scaled(800, 700)       
         self.image_view.setPixmap(QtGui.QPixmap.fromImage(self.image))
 
 
@@ -111,8 +114,7 @@ class StartWindow(QMainWindow):
 
     @pyqtSlot(np.ndarray)
     def update_Live(self, cv_img):
-        qt_img = self.convert_cv_qt(cv_img, transform=0)
-        #self.playSound()
+        qt_img = self.convert_cv_qt(cv_img, transform=1)        
         self.image_view.setPixmap(qt_img)
 
     def convert_cv_qt(self, cv_img, transform):
@@ -120,7 +122,7 @@ class StartWindow(QMainWindow):
         h, w, ch = rgb_image.shape
         bytes_per_line = ch * w
         convert_to_Qt_format = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
-        p = convert_to_Qt_format.scaled(640, 350, Qt.KeepAspectRatio)
+        p = convert_to_Qt_format.scaled(700, 800)
 
         t = QtGui.QTransform()
         t.rotate(90)
@@ -163,8 +165,8 @@ class LiveThread(QThread):
         while self._run_flag:
             ret, cv_img = cap.read()
             if ret:
-                check, cv_img = self.image_segmentation.analize_video(cv_img)
-                cv_img = cv2.rotate(cv_img, cv2.ROTATE_90_COUNTERCLOCKWISE)
+                check, cv_img = self.image_segmentation.analize_video(cv_img, 0)
+                cv_img = cv2.rotate(cv_img, cv2.ROTATE_90_COUNTERCLOCKWISE)                
                 self.change_pixmap_signal.emit(cv_img)
 
                 if not check:
@@ -212,7 +214,7 @@ class VideoThread(QThread):
         while self._run_flag:
             ret, cv_img = cap.read()
             if ret:
-                check, cv_img = self.image_segmentation.analize_video(cv_img)
+                check, cv_img = self.image_segmentation.analize_video(cv_img, 1)
                 cv_img = cv2.rotate(cv_img, cv2.ROTATE_90_COUNTERCLOCKWISE)
 
                 self.change_pixmap_signal.emit(cv_img)

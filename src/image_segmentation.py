@@ -32,11 +32,11 @@ class ImageSegmentation():
 
         return center_offset
 
-    def put_car_position_on_image(self, frame, car_position):
+    def put_car_position_on_image(self, frame, car_position, scale):
 
         font = cv2.FONT_HERSHEY_SIMPLEX
-        text_start_position = (10, 100)
-        font_scale = 2
+        text_start_position = (0, 40)
+        font_scale = scale
         font_color = (0, 0, 0)
         line_type = 2
 
@@ -45,11 +45,11 @@ class ImageSegmentation():
 
         return frame
 
-    def put_lane_curvature_on_image(self, frame, left_curvature, right_curvature):
+    def put_lane_curvature_on_image(self, frame, left_curvature, right_curvature, scale):
 
         font = cv2.FONT_HERSHEY_SIMPLEX
-        text_start_position = (10, 250)
-        font_scale = 2
+        text_start_position = (0, 80 * scale)
+        font_scale = scale
         font_color = (0, 0, 0)
         line_type = 2
 
@@ -211,9 +211,13 @@ class ImageSegmentation():
             return 0, 0, car_position, False, np.array([left_line, right_line])
 
 
-    def analize_video(self, frame):
+    def analize_video(self, frame, rotate):
 
-        frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)        
+        if rotate == 1:
+            frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+            scale = 2
+        else:
+            scale = 1        
 
         canny_image = self.canny(frame)
         bird_view_image = self.get_bird_view(canny_image, frame.shape[::-1][1:])
@@ -227,7 +231,7 @@ class ImageSegmentation():
             frame, hough_image)
 
         if not valid_detection:
-            frame = self.put_car_position_on_image(frame, car_position)
+            frame = self.put_car_position_on_image(frame, car_position, scale)            
             return False, frame
         
         filled_lanes = self.fill_lane(average_lines_image, frame)
@@ -235,25 +239,40 @@ class ImageSegmentation():
         
         combo_image = cv2.addWeighted(frame, 0.8, lines_image, 1, 1)
         combo_image = cv2.addWeighted(combo_image, 0.8, filled_lanes, 1, 1)
-        combo_image = self.put_car_position_on_image(combo_image, car_position)
-        combo_image = self.put_lane_curvature_on_image(combo_image, left_curvature, right_curvature)       
+        combo_image = self.put_car_position_on_image(combo_image, car_position, scale)
+        combo_image = self.put_lane_curvature_on_image(combo_image, left_curvature, right_curvature, scale)       
 
         return True, combo_image
 
-    def analize_photo(self, frame):
+    def analize_photo(self, frame, rotate):
+
+        if rotate == 1:
+            frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+            scale = 2
+        else:
+            scale = 1 
 
         canny_image = self.canny(frame)
-        cropped_image = self.region_of_interest(canny_image)
+        bird_view_image = self.get_bird_view(canny_image, frame.shape[::-1][1:])
+        cropped_image = self.region_of_interest(bird_view_image)        
 
-        bird_view_image = self.get_bird_view(cropped_image, frame.shape[::-1][1:])
+        from_bird_view = self.return_from_bird_view(cropped_image, frame)
 
-        hough_image = cv2.HoughLinesP(bird_view_image, 2, np.pi/180, 100, np.array([]), minLineLength=40, maxLineGap=5)
-        average_lines_image = self.average_slope_intercept(frame, hough_image)
+        hough_image = cv2.HoughLinesP(from_bird_view, 2, np.pi/180, 100, np.array([]), minLineLength=40, maxLineGap=5)
 
+        left_curvature, right_curvature, car_position, valid_detection, average_lines_image = self.average_slope_intercept(
+            frame, hough_image)
+
+        if not valid_detection:
+            frame = self.put_car_position_on_image(frame, car_position, scale)            
+            return False, frame
+        
         filled_lanes = self.fill_lane(average_lines_image, frame)
         lines_image = self.display_lines(frame, average_lines_image)
-
+        
         combo_image = cv2.addWeighted(frame, 0.8, lines_image, 1, 1)
         combo_image = cv2.addWeighted(combo_image, 0.8, filled_lanes, 1, 1)
+        combo_image = self.put_car_position_on_image(combo_image, car_position, scale)
+        combo_image = self.put_lane_curvature_on_image(combo_image, left_curvature, right_curvature, scale)       
 
-        return combo_image
+        return True, combo_image
