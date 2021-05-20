@@ -214,7 +214,7 @@ class VideoThread(QThread):
         while self._run_flag:
             ret, cv_img = cap.read()
             if ret:
-                check, cv_img = self.image_segmentation.analize_video(cv_img, 1)
+                check, cv_img = self.image_segmentation.analize_video(cv_img, 0)
                 cv_img = cv2.rotate(cv_img, cv2.ROTATE_90_COUNTERCLOCKWISE)
 
                 self.change_pixmap_signal.emit(cv_img)
