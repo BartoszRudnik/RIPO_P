@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import sys
 import pygame
 import datetime as dt
-import math
+
 
 class ImageSegmentation():
     def __init__(self):
@@ -12,7 +12,7 @@ class ImageSegmentation():
 
     def car_position(self, frame, left_fit, right_fit):
 
-        XM_PER_PIX = 3.5 / 480
+        XM_PER_PIX = 3.5 / 250
 
         car_location = frame.shape[1] / 2
         height = frame.shape[0]
@@ -59,9 +59,9 @@ class ImageSegmentation():
         return frame
 
     def lane_curvature(self, left_y, left_x, right_y, right_x):
-        y_eval = 1180
-        YM_PER_PIX = 3.5 / 450
-        XM_PER_PIX = 3.5 / 480
+        y_eval = 150
+        YM_PER_PIX = 3.5 / 250
+        XM_PER_PIX = 3.5 / 250
 
         left_fit_cr = np.polyfit(left_y * YM_PER_PIX, left_x * (
             XM_PER_PIX), 2)
@@ -96,8 +96,8 @@ class ImageSegmentation():
 
     def get_bird_view(self, frame, original_image_size):
 
-        region_of_interest = np.float32([(200, 830), (0, 1280), (1080, 1280),  (770, 830)])
-        desired_points = np.float32([(200, 0), (200, 1280), (1080, 1280), (1080, 0)])
+        region_of_interest = np.float32([(100, 250), (360, 250), (550, 360), (0, 360)])
+        desired_points = np.float32([(150, 200), (400, 200), (400, 360), (150, 360)])
 
         transformation_matrix = cv2.getPerspectiveTransform(region_of_interest, desired_points)        
 
@@ -109,8 +109,8 @@ class ImageSegmentation():
 
     def return_from_bird_view(self, frame, original_frame):
 
-        region_of_interest = np.float32([(200, 830), (0, 1280), (1080, 1280),  (770, 830)])
-        desired_points = np.float32([(200, 0), (200, 1280), (1080, 1280), (1080, 0)])
+        region_of_interest = np.float32([(100, 150), (0, 360), (550, 360), (360, 150)])
+        desired_points = np.float32([(150, 200), (150, 360), (400, 360), (400, 200)])
 
         inverse_transformation_matrix = cv2.getPerspectiveTransform(desired_points, region_of_interest)
 
@@ -122,12 +122,12 @@ class ImageSegmentation():
         lane_image = np.copy(image)
         gray_image = cv2.cvtColor(lane_image, cv2.COLOR_RGB2GRAY)
         blur_image = cv2.GaussianBlur(gray_image, (5, 5), 0)
-        canny_image = cv2.Canny(blur_image, 50, 120)
+        canny_image = cv2.Canny(blur_image, 80, 150)
         return canny_image
 
     def region_of_interest(self, image):
         trapezoid = np.array(
-            [[(400, 330), (0, 550), (600, 330), (900, 550)]])
+            [[(100, 150), (360, 150), (550, 360), (0, 360)]])
         mask = np.zeros_like(image)
         cv2.fillPoly(mask, trapezoid, 255)
         masked_image = cv2.bitwise_and(image, mask)
@@ -159,8 +159,8 @@ class ImageSegmentation():
             if slope > -0.01 and slope < 0:
                 slope = -1
 
-            y1 = 550
-            y2 = 350
+            y1 = 360
+            y2 = 150
 
             x1 = int((y1 - intercept)/slope)
             x2 = int((y2 - intercept)/slope)
@@ -170,7 +170,7 @@ class ImageSegmentation():
         except TypeError:
             return False, np.array([0, 0, 0, 0])
 
-    def average_slope_intercept(self, image, lines):
+    def average_slope_intercept(self, image, lines, bird_view_image):
         left_fit = []
         right_fit = []
 
@@ -182,9 +182,7 @@ class ImageSegmentation():
                 slope = param[0]
                 intercept = param[1]
 
-                if math.fabs(slope) < 0.5:
-                    continue
-                elif slope < 0:
+                if slope < 0:
                     left_fit.append((slope, intercept))
                 else:
                     right_fit.append((slope, intercept))
@@ -197,7 +195,7 @@ class ImageSegmentation():
         right_detected, right_line = self.make_coordinates(
             image, right_fit_average)
 
-        car_position = self.car_position(image, left_line, right_line)
+        car_position = self.car_position(bird_view_image, left_line, right_line)
 
         left_line_y = np.array([left_line[1], left_line[3]])
         left_line_x = np.array([left_line[0], left_line[2]])
@@ -206,8 +204,7 @@ class ImageSegmentation():
         right_line_x = np.array([right_line[0], right_line[2]])
 
         if left_detected and right_detected:
-            left_curvature, right_curvature = self.lane_curvature(
-                left_line_y, left_line_x, right_line_y, right_line_x)
+            left_curvature, right_curvature = self.lane_curvature(left_line_y, left_line_x, right_line_y, right_line_x)
             return left_curvature, right_curvature, car_position, True, np.array([left_line, right_line])
         else:
             return 0, 0, car_position, False, np.array([left_line, right_line])
@@ -218,23 +215,25 @@ class ImageSegmentation():
         if rotate == 1:
             frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
             scale = 2
+        elif rotate == 2:
+            frame = cv2.rotate(frame, cv2.ROTATE_180)
+            scale = 1
         else:
             scale = 1        
 
-        canny_image = self.canny(frame)
-        #bird_view_image = self.get_bird_view(canny_image, frame.shape[::-1][1:])
+        canny_image = self.canny(frame)        
         cropped_image = self.region_of_interest(canny_image)        
 
-        from_bird_view = self.return_from_bird_view(cropped_image, frame)
-
-        hough_image = cv2.HoughLinesP(cropped_image, 1, np.pi/ 180, 30, maxLineGap=300)
+        bird_view_image = self.get_bird_view(canny_image, frame.shape[::-1][1:])
+        
+        hough_image = cv2.HoughLinesP(cropped_image, 2, np.pi/180, 100, np.array([]), minLineLength=40, maxLineGap=5)
 
         left_curvature, right_curvature, car_position, valid_detection, average_lines_image = self.average_slope_intercept(
-            frame, hough_image)
+            frame, hough_image, bird_view_image)
 
-        # if not valid_detection:
-        #     frame = self.put_car_position_on_image(frame, car_position, scale)            
-        #     return False, frame
+        if not valid_detection:
+            frame = self.put_car_position_on_image(frame, car_position, scale)            
+            return False, frame
         
         filled_lanes = self.fill_lane(average_lines_image, frame)
         lines_image = self.display_lines(frame, average_lines_image)
@@ -251,19 +250,21 @@ class ImageSegmentation():
         if rotate == 1:
             frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
             scale = 2
+        elif rotate == 2:
+            frame = cv2.rotate(frame, cv2.ROTATE_180)
+            scale = 1
         else:
-            scale = 1 
+            scale = 1        
 
-        canny_image = self.canny(frame)
+        canny_image = self.canny(frame)        
+        cropped_image = self.region_of_interest(canny_image)        
+
         bird_view_image = self.get_bird_view(canny_image, frame.shape[::-1][1:])
-        cropped_image = self.region_of_interest(bird_view_image)        
-
-        from_bird_view = self.return_from_bird_view(cropped_image, frame)
-
-        hough_image = cv2.HoughLinesP(from_bird_view, 2, np.pi/180, 100, np.array([]), minLineLength=10, maxLineGap=355)
+        
+        hough_image = cv2.HoughLinesP(cropped_image, 2, np.pi/180, 100, np.array([]), minLineLength=40, maxLineGap=5)
 
         left_curvature, right_curvature, car_position, valid_detection, average_lines_image = self.average_slope_intercept(
-            frame, hough_image)
+            frame, hough_image, bird_view_image)
 
         if not valid_detection:
             frame = self.put_car_position_on_image(frame, car_position, scale)            
