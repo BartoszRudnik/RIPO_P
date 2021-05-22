@@ -1,1 +1,1 @@
-# RIPO_P
+# Rozpoznawanie i przetwarzanie obrazów
